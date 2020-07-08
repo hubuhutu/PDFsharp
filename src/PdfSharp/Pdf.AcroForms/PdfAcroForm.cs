@@ -27,6 +27,9 @@
 // DEALINGS IN THE SOFTWARE.
 #endregion
 
+using System.Collections.Generic;
+using System.Linq;
+
 namespace PdfSharp.Pdf.AcroForms
 {
     /// <summary>
@@ -64,6 +67,51 @@ namespace PdfSharp.Pdf.AcroForms
             }
         }
         PdfAcroField.PdfAcroFieldCollection _fields;
+
+        /// <summary>
+        /// Flattens the AcroForm by rendering Field-contents directly onto the page.
+        /// </summary>
+        public void Flatten()
+        {
+            for (var i = 0; i < Fields.Elements.Count; i++)
+            {
+                var field = Fields[i];
+                field.Flatten();
+            }
+            _document.Catalog.AcroForm = null;
+        }
+
+        internal override void PrepareForSave()
+        {
+            base.PrepareForSave();
+
+            IEnumerable<PdfAcroField> typedFields = Fields;
+
+            var allFields = typedFields.Concat(typedFields.SelectMany(tf => WalkAllFields(tf)));
+            foreach (var element in allFields)
+            {
+                element.PrepareForSave();
+            }
+        }
+
+        public IEnumerable<PdfAcroField> WalkAllFields(PdfAcroField current)
+        {
+            if (!current.HasKids)
+            {
+                yield return current;
+                yield break;
+            }
+
+
+            foreach (var child in current.Fields)
+            {
+                var subchildren = WalkAllFields(child);
+                foreach (var subChild in subchildren)
+                {
+                    yield return subChild;
+                }
+            }
+        }
 
         /// <summary>
         /// Predefined keys of this dictionary. 

@@ -180,6 +180,12 @@ namespace PdfSharp.Pdf
             _flags = flags;
         }
 
+        internal PdfString(string value, PdfStringFlags flags, int paddingLeft = 0)
+        {
+            _value = value;
+            _flags = flags;
+            this.PaddingLeft = paddingLeft;
+        }
         /// <summary>
         /// Gets the number of characters in this string.
         /// </summary>
@@ -209,6 +215,8 @@ namespace PdfSharp.Pdf
             get { return _flags; }
         }
         readonly PdfStringFlags _flags;
+
+        public int PaddingLeft { get; private set; }
 
         /// <summary>
         /// Gets the string value.
@@ -240,7 +248,7 @@ namespace PdfSharp.Pdf
             PdfStringEncoding encoding = (PdfStringEncoding)(_flags & PdfStringFlags.EncodingMask);
             string pdf = (_flags & PdfStringFlags.HexLiteral) == 0 ?
                 PdfEncoders.ToStringLiteral(_value, encoding, null) :
-                PdfEncoders.ToHexStringLiteral(_value, encoding, null);
+                PdfEncoders.ToHexStringLiteral(_value, encoding, null, PaddingLeft);
             return pdf;
 #else
             return _value;

@@ -30,7 +30,14 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf.AcroForms.enums;
 using PdfSharp.Pdf.Advanced;
+using PdfSharp.Pdf.Annotations;
+using PdfSharp.Pdf.Content;
+using PdfSharp.Pdf.Content.Objects;
+using PdfSharp.Pdf.Internal;
 
 namespace PdfSharp.Pdf.AcroForms
 {
@@ -51,7 +58,9 @@ namespace PdfSharp.Pdf.AcroForms
         /// </summary>
         protected PdfAcroField(PdfDictionary dict)
             : base(dict)
-        { }
+        {
+            DetermineAppearance();
+        }
 
         /// <summary>
         /// Gets the name of this field.
@@ -63,7 +72,44 @@ namespace PdfSharp.Pdf.AcroForms
                 string name = Elements.GetString(Keys.T);
                 return name;
             }
+            set
+            {
+                Elements.SetString(Keys.T, value);
+            }
         }
+
+        /// <summary>
+        /// Gets the alternative Name of the Field (/TU)
+        /// </summary>
+        public string AlternateName
+        {
+            get { return Elements.GetString(Keys.TU); }
+        }
+
+        /// <summary>
+        /// Gets the mapping Name of the Field (/TM)
+        /// </summary>
+        public string MappingName
+        {
+            get { return Elements.GetString(Keys.TM); }
+        }
+        /// <summary>
+        /// Gets the Parent of this field or null, if the field has no parent
+        /// </summary>
+        public PdfAcroField Parent
+        {
+            get
+            {
+                if (_parent == null)
+                {
+                    var parentRef = Elements.GetReference(Keys.Parent);
+                    if (parentRef != null)
+                        _parent = PdfAcroFieldCollection.CreateAcroField(parentRef.Value as PdfDictionary);
+                }
+                return _parent;
+            }
+        }
+        private PdfAcroField _parent;
 
         /// <summary>
         /// Gets the field flags of this instance.
@@ -81,6 +127,76 @@ namespace PdfSharp.Pdf.AcroForms
         }
 
         /// <summary>
+        /// Gets or sets the font used to draw the text of the field.
+        /// </summary>
+        public XFont Font
+        {
+            get { return this.font; }
+            set
+            {
+                this.font = value;
+                PrepareForSave();
+                FontChanged();
+            }
+        }
+
+        protected virtual void FontChanged()
+        {
+        }
+
+        XFont font = new XFont("Arial", 10);
+
+        /// <summary>
+        /// Gets the font name that was obtained by analyzing the Fields' content-stream.
+        /// </summary>
+        public string ContentFontName { get; private set; }
+
+        /// <summary>
+        /// Gets the base font name that was obtained by analyzing the Fields' content-stream.
+        /// </summary>
+        public string BaseContentFontName { get; private set; }
+        /// <summary>
+        /// Gets or sets the foreground color of the field.
+        /// </summary>
+        public XColor ForeColor
+        {
+            get { return this.foreColor; }
+            set
+            {
+                this.foreColor = value;
+                PrepareForSave();
+            }
+        }
+        XColor foreColor = XColors.Black;
+
+        /// <summary>
+        /// Gets or sets the background color of the field.
+        /// </summary>
+        public XColor BackColor
+        {
+            get { return this.backColor; }
+            set
+            {
+                this.backColor = value;
+                PrepareForSave();
+            }
+        }
+        XColor backColor = XColor.Empty;
+
+        /// <summary>
+        /// Gets or sets the border color of the field.
+        /// </summary>
+        public XColor BorderColor
+        {
+            get { return this.borderColor; }
+            set
+            {
+                this.borderColor = value;
+                PrepareForSave();
+            }
+        }
+        XColor borderColor = XColor.Empty;
+        /// <summary>
         /// Gets or sets the value of the field.
         /// </summary>
         public virtual PdfItem Value
@@ -97,6 +213,26 @@ namespace PdfSharp.Pdf.AcroForms
             }
         }
 
+        /// <summary>
+        /// Gets or sets the default value of the field.
+        /// </summary>
+        public virtual PdfItem DefaultValue
+        {
+            get { return Elements[Keys.DV]; }
+            set { Elements[Keys.DV] = value; }
+        }
+        /// <summary>
+        /// Gets the Rectangle of the field
+        /// </summary>
+        public PdfRectangle Rect
+        {
+            get { return Elements.GetRectangle(PdfAnnotation.Keys.Rect); }
+
+            set
+            {
+                Elements.SetRectangle(PdfAnnotation.Keys.Rect, value);
+            }
+        }
         /// <summary>
         /// Gets or sets a value indicating whether the field is read only.
         /// </summary>
@@ -148,6 +284,15 @@ namespace PdfSharp.Pdf.AcroForms
             }
         }
 
+        public void AddKid(PdfAcroField kid)
+        {
+            if (kid.Elements.ContainsKey(Keys.Parent))
+                throw new ArgumentException("Field already belongs to another parent.");
+
+            Fields.Add(kid, this.Page);
+
+            kid.Elements.SetReference(Keys.Parent, this.Reference);
+        }
         /// <summary>
         /// Gets the names of all descendants of this field.
         /// </summary>
@@ -300,15 +445,404 @@ namespace PdfSharp.Pdf.AcroForms
         }
         PdfAcroFieldCollection _fields;
 
+
+        /// <summary>
+        /// Gets a reference to the Page object this field belongs to
+        /// </summary>
+        public PdfReference PageReference
+        {
+            get
+            {
+                if (pageReference == null)
+                    DeterminePage();
+                return pageReference;
+            }
+        }
+        private PdfReference pageReference;
+
+        /// <summary>
+        /// Gets the Page this Field is a member of
+        /// </summary>
+        public PdfPage Page
+        {
+            get { return PageReference != null ? (PdfPage)PageReference.Value : null; }
+        }
+
+        /// <summary>
+        /// Tries to find the page reference object for this field
+        /// </summary>
+        protected internal void DeterminePage()
+        {
+            if (pageReference == null)
+            {
+                var pageRef = Elements.GetReference(Keys.Page);
+                if (pageRef == null)
+                {
+                    var curField = Parent;
+                    // first scan up in the hierarchy
+                    while (curField != null && pageRef == null)
+                    {
+                        pageRef = curField.Elements.GetReference(Keys.Page);
+                        if (pageRef == null)
+                            curField = curField.Parent;
+                    }
+                    if (pageRef == null)
+                    {
+                        curField = this;
+                        // now scan down the hierarchy
+                        for (var i = 0; i < curField.Fields.Names.Length; i++)
+                        {
+                            curField = curField.Fields[i];
+                            pageRef = FindPageRefInChilds(curField);
+                            if (pageRef != null)
+                                break;
+                        }
+                    }
+                }
+                if (pageRef != null)
+                {
+                    for (var i = 0; i < _document.PageCount; i++)
+                    {
+                        var page = _document.Pages[i];
+                        if (page.ObjectID == pageRef.ObjectID)
+                        {
+                            pageRef = page.Reference;
+                            break;
+                        }
+                    }
+                }
+                pageReference = pageRef;
+            }
+        }
+
+        private PdfReference FindPageRefInChilds(PdfAcroField startField)
+        {
+            var pageRef = startField.Elements.GetReference(Keys.Page);
+            if (pageRef != null)
+                return pageRef;
+            for (var i = 0; i < startField.Fields.Names.Length; i++)
+            {
+                var child = startField.Fields[i];
+                pageRef = child.Elements.GetReference(Keys.Page);
+                if (pageRef != null)
+                    return pageRef;
+                pageRef = FindPageRefInChilds(child);
+                if (pageRef != null)
+                    return pageRef;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Sets the font size by constructing a copy with the same options
+        /// and updating the default appearance stream.
+        /// </summary>
+        /// <param name="size">Em size of the font</param>
+        public void SetFontSize(double size)
+        {
+            Font = new XFont(Font.FamilyName, size, Font.Style, Font.PdfOptions, Font.StyleSimulations);
+        }
+
+
+        internal override void PrepareForSave()
+        {
+            base.PrepareForSave();
+            //set or update the default appearance stream
+            string textAppearanceStream = string.Format("/{0} {1:0.##} Tf", Font.FamilyName, Font.Size);
+
+            string colorStream = string.Empty;
+
+            switch (ForeColor.ColorSpace)
+            {
+                case XColorSpace.Rgb:
+                    colorStream = string.Format("{0:0.#} {1:0.#} {2:0.#} rg", ForeColor.R / 255d, ForeColor.G / 255d, ForeColor.B / 255);
+                    break;
+                case XColorSpace.GrayScale:
+                    colorStream = string.Format("{0:0.#} g", ForeColor.GS);
+                    break;
+            }
+
+            var mk = Elements.GetDictionary(PdfWidgetAnnotation.Keys.MK);
+
+
+            if (mk == null && (BorderColor != XColor.Empty || BackColor != XColor.Empty))
+            {
+                mk = new PdfDictionary(_document);
+                Elements.SetObject(PdfWidgetAnnotation.Keys.MK, mk);
+            }
+
+            if (BorderColor != XColor.Empty)
+            {
+                var bc = BorderColor.ToArray();
+                mk.Elements.SetObject("/BC", bc);
+            }
+            else if (mk != null && mk.Elements.ContainsKey("/BC"))
+            {
+                mk.Elements.Remove("/BC");
+            }
+
+            if (BackColor != XColor.Empty)
+            {
+                var bg = BackColor.ToArray();
+                mk.Elements.SetObject("/BG", bg);
+            }
+            else if (mk != null && mk.Elements.ContainsKey("/BG"))
+            {
+                mk.Elements.Remove("/BG");
+            }
+
+            Elements.SetString(Keys.DA, textAppearanceStream + " " + colorStream);
+        }
+
+        /// <summary>
+        /// Tries to determine the Appearance of the Field by checking elements of its dictionary
+        /// </summary>
+        protected internal void DetermineAppearance()
+        {
+            string da = null;
+            var field = this;
+            try
+            {
+                while (da == null && field != null)
+                {
+                    da = field.Elements.GetString(Keys.DA);
+                    if (String.IsNullOrEmpty(da))
+                        da = null;
+                    var mk = field.Elements.GetDictionary(PdfWidgetAnnotation.Keys.MK);
+                    if (mk != null)
+                    {
+                        var bc = mk.Elements.GetArray("/BC");
+                        if (bc == null || bc.Elements.Count == 0)
+                            borderColor = XColor.Empty;
+                        else if (bc.Elements.Count == 1)
+                            borderColor = XColor.FromGrayScale(bc.Elements.GetReal(0));
+                        else if (bc.Elements.Count == 3)
+                            borderColor = XColor.FromArgb((int)(bc.Elements.GetReal(0) * 255.0), (int)(bc.Elements.GetReal(1) * 255.0), (int)(bc.Elements.GetReal(2) * 255.0));
+                        else if (bc.Elements.Count == 4)
+                            borderColor = XColor.FromCmyk(bc.Elements.GetReal(0), bc.Elements.GetReal(1), bc.Elements.GetReal(2), bc.Elements.GetReal(3));
+
+                        var bg = mk.Elements.GetArray("/BG");
+                        if (bg == null || bg.Elements.Count == 0)
+                            backColor = XColor.Empty;
+                        else if (bg.Elements.Count == 1)
+                            backColor = XColor.FromGrayScale(bg.Elements.GetReal(0));
+                        else if (bg.Elements.Count == 3)
+                            backColor = XColor.FromArgb((int)(bg.Elements.GetReal(0) * 255.0), (int)(bg.Elements.GetReal(1) * 255.0), (int)(bg.Elements.GetReal(2) * 255.0));
+                        else if (bg.Elements.Count == 4)
+                            backColor = XColor.FromCmyk(bg.Elements.GetReal(0), bg.Elements.GetReal(1), bg.Elements.GetReal(2), bg.Elements.GetReal(3));
+                    }
+                    field = field.Parent;
+                }
+                if (da == null)
+                    return;
+                string fontName = null;
+                double fontSize = 0.0;
+                var content = ContentReader.ReadContent(PdfEncoders.RawEncoding.GetBytes(da));
+                for (var i = 0; i < content.Count; i++)
+                {
+                    var op = content[i] as COperator;
+                    if (op != null)
+                    {
+                        switch (op.OpCode.OpCodeName)
+                        {
+                            case OpCodeName.Tf:
+                                fontName = op.Operands[0].ToString();
+                                fontSize = Double.Parse(op.Operands[1].ToString());
+                                if (fontSize < 0.1)
+                                    fontSize = Rect.Height * 0.8;  // TODO: don't know how to determine correct size...
+                                break;
+                            case OpCodeName.g:
+                                double greyValue = Double.Parse(op.Operands[0].ToString());
+                                foreColor = XColor.FromGrayScale(greyValue);
+                                break;
+                            case OpCodeName.rg:
+                                int redValue = (int)(Double.Parse(op.Operands[0].ToString()) * 255d);
+                                int greenValue = (int)(Double.Parse(op.Operands[1].ToString()) * 255d);
+                                int blueValue = (int)(Double.Parse(op.Operands[2].ToString()) * 255d);
+                                foreColor = XColor.FromArgb(redValue, greenValue, blueValue);
+                                break;
+                        }
+                    }
+                }
+                if (!String.IsNullOrEmpty(fontName) && fontSize > 0.0)
+                {
+                    ContentFontName = fontName.Substring(1);    // e.g. "/Helv"
+                    var resources = _document.AcroForm.Elements.GetDictionary(PdfAcroForm.Keys.DR);
+                    if (resources != null && resources.Elements.ContainsKey("/Font"))
+                    {
+                        var fontList = resources.Elements.GetDictionary("/Font");
+                        var fontRef = fontList.Elements.GetReference(fontName);
+                        if (fontRef != null)
+                        {
+                            var fontDict = fontRef.Value as PdfDictionary;
+                            if (fontDict != null && fontDict.Elements.ContainsKey("/BaseFont"))
+                            {
+                                var baseName = fontDict.Elements.GetString("/BaseFont");
+                                if (!String.IsNullOrEmpty(baseName))
+                                    fontName = baseName;        // e.g. "/Helvetica"
+                            }
+                        }
+                    }
+                    BaseContentFontName = fontName.Substring(1);
+                    font = new XFont(BaseContentFontName, fontSize);
+                }
+            }
+            catch { }
+        }
+
+        internal virtual void Flatten()
+        {
+            // Copy Font-Resources to the Page
+            // This is neccessary, because Fonts used by AcroFields may be referenced only by the AcroForm, which is deleted after flattening
+            if (Page != null)
+            {
+                var resources = _document.AcroForm.Elements.GetDictionary(PdfAcroForm.Keys.DR);
+                if (!String.IsNullOrEmpty(ContentFontName) && resources != null && resources.Elements.ContainsKey(PdfResources.Keys.Font))
+                {
+                    var fontKey = "/" + ContentFontName;
+                    var fontList = resources.Elements.GetDictionary(PdfResources.Keys.Font);
+                    var fontRef = fontList.Elements.GetReference(fontKey);
+                    if (fontRef != null)
+                    {
+                        if (!Page.Resources.Elements.ContainsKey(PdfResources.Keys.Font))
+                        {
+                            Page.Resources.Elements.Add(PdfResources.Keys.Font, new PdfDictionary());
+                        }
+                        var fontDict = Page.Resources.Elements.GetDictionary(PdfResources.Keys.Font);
+                        if (fontDict != null && !fontDict.Elements.ContainsKey(fontKey))
+                            fontDict.Elements.Add(fontKey, fontRef);
+                    }
+                }
+
+                var rect = Rect;
+                if (!rect.IsEmpty && (!BackColor.IsEmpty || !BorderColor.IsEmpty))
+                {
+                    using (var gfx = XGraphics.FromPdfPage(Page))
+                    {
+                        gfx.TranslateTransform(rect.X1, Page.Height.Point - rect.Y2);
+                        if (BackColor != XColor.Empty)
+                            gfx.DrawRectangle(new XSolidBrush(BackColor), rect.ToXRect() - rect.Location);
+                        // Draw Border
+                        if (!BorderColor.IsEmpty)
+                            gfx.DrawRectangle(new XPen(BorderColor), rect.ToXRect() - rect.Location);
+                    }
+                }
+
+                // Remove Field-Annotations from page
+                for (var i = 0; i < Page.Annotations.Elements.Count; i++)
+                {
+                    var item = Page.Annotations.Elements[i] as PdfReference;
+                    if (item == Reference)
+                    {
+                        Page.Annotations.Elements.RemoveAt(i);
+                        break;
+                    }
+                }
+            }
+            for (var i = 0; i < Fields.Elements.Count; i++)
+            {
+                var field = Fields[i];
+                field.Flatten();
+            }
+
+            if (Reference != null)
+                _document._irefTable.Remove(Reference);
+        }
+
+        /// <summary>
+        /// Renders the contents of the supplied Stream to the Page at the position specified by the Field-Rectangle
+        /// </summary>
+        /// <param name="stream"></param>
+        protected virtual void RenderContentStream(PdfStream stream)
+        {
+            RenderContentStream(stream, Rect);
+        }
+
+        /// <summary>
+        /// Renders the contents of the supplied Stream to the Page at the position specified by the provided Rectangle
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <param name="rect"></param>
+        protected virtual void RenderContentStream(PdfStream stream, PdfRectangle rect)
+        {
+            if (stream == null)
+                return;
+            var content = ContentReader.ReadContent(stream.UnfilteredValue);
+            var matrix = new XMatrix();
+            matrix.TranslateAppend(rect.X1, rect.Y1);
+            var matElements = matrix.GetElements();
+            var matrixOp = OpCodes.OperatorFromName("cm");
+            foreach (var el in matElements)
+                matrixOp.Operands.Add(new CReal { Value = el });
+            content.Insert(0, matrixOp);
+
+            // Save and restore Graphics state
+            content.Insert(0, OpCodes.OperatorFromName("q"));
+            content.Add(OpCodes.OperatorFromName("Q"));
+            var appendedContent = Page.Contents.AppendContent();
+            using (var ms = new MemoryStream())
+            {
+                var cw = new ContentWriter(ms);
+                foreach (var obj in content)
+                    obj.WriteObject(cw);
+                appendedContent.CreateStream(ms.ToArray());
+            }
+        }
+
+
+        /// <summary>Attempts to determine which type of field a PdfDictionary represents</summary>
+        /// <param name="dict"></param>
+        /// <returns></returns>
+        public static PdfAcroFieldType DetermineFieldType(PdfDictionary dict)
+        {
+            if (!dict.Elements.ContainsKey(Keys.FT))
+            {
+                return PdfAcroFieldType.Unknown;
+            }
+
+            string ft = dict.Elements.GetName(Keys.FT);
+            PdfAcroFieldFlags flags = (PdfAcroFieldFlags)dict.Elements.GetInteger(Keys.Ff);
+            switch (ft)
+            {
+                case "/Btn":
+                    if ((flags & PdfAcroFieldFlags.Pushbutton) != 0)
+                        return PdfAcroFieldType.PushButton;
+
+                    if ((flags & PdfAcroFieldFlags.Radio) != 0)
+                        return PdfAcroFieldType.RadioButton;
+
+                    return PdfAcroFieldType.CheckBox;
+
+                case "/Tx":
+                    return PdfAcroFieldType.Text;
+
+                case "/Ch":
+                    if ((flags & PdfAcroFieldFlags.Combo) != 0)
+                        return PdfAcroFieldType.ComboBox;
+                    else
+                        return PdfAcroFieldType.ListBox;
+
+                case "/Sig":
+                    return PdfAcroFieldType.Signature;
+
+                default:
+                    return PdfAcroFieldType.Unknown;
+            }
+        }
+
+
         /// <summary>
         /// Holds a collection of interactive fields.
         /// </summary>
-        public sealed class PdfAcroFieldCollection : PdfArray
+        public sealed class PdfAcroFieldCollection : PdfArray, IEnumerable<PdfAcroField>
         {
             PdfAcroFieldCollection(PdfArray array)
                 : base(array)
             { }
 
+            internal PdfAcroFieldCollection(PdfDocument document)
+                : base(document)
+            { }
             /// <summary>  
             /// Gets the number of elements in the array.  
             /// </summary>  
@@ -414,44 +948,63 @@ namespace PdfSharp.Pdf.AcroForms
                 return null;
             }
 
+            public void Add(PdfAcroField field, int pageNumber)
+            {
+                Add(field, _document.Pages[pageNumber - 1]);
+            }
+
+            internal void Add(PdfAcroField field, PdfPage page)
+            {
+                field.Elements.SetReference(Keys.Page, page.Reference);
+                _document._irefTable.Add(field);
+                page.Annotations.Elements.Add(field); //directly adding to elements prevents cast
+                Elements.Add(field);
+            }
             /// <summary>
             /// Create a derived type like PdfTextField or PdfCheckBox if possible.
             /// If the actual cannot be guessed by PDFsharp the function returns an instance
             /// of PdfGenericField.
             /// </summary>
-            PdfAcroField CreateAcroField(PdfDictionary dict)
+            public static PdfAcroField CreateAcroField(PdfDictionary dict)
             {
-                string ft = dict.Elements.GetName(Keys.FT);
-                PdfAcroFieldFlags flags = (PdfAcroFieldFlags)dict.Elements.GetInteger(Keys.Ff);
-                switch (ft)
+                switch (PdfAcroField.DetermineFieldType(dict))
                 {
-                    case "/Btn":
-                        if ((flags & PdfAcroFieldFlags.Pushbutton) != 0)
-                            return new PdfPushButtonField(dict);
-
-                        if ((flags & PdfAcroFieldFlags.Radio) != 0)
-                            return new PdfRadioButtonField(dict);
-
+                    case PdfAcroFieldType.PushButton:
+                        return new PdfPushButtonField(dict);
+                    case PdfAcroFieldType.RadioButton:
+                        return new PdfRadioButtonField(dict);
+                    case PdfAcroFieldType.CheckBox:
                         return new PdfCheckBoxField(dict);
-
-                    case "/Tx":
+                    case PdfAcroFieldType.Text:
                         return new PdfTextField(dict);
-
-                    case "/Ch":
-                        if ((flags & PdfAcroFieldFlags.Combo) != 0)
-                            return new PdfComboBoxField(dict);
-                        else
-                            return new PdfListBoxField(dict);
-
-                    case "/Sig":
+                    case PdfAcroFieldType.ComboBox:
+                        return new PdfComboBoxField(dict);
+                    case PdfAcroFieldType.ListBox:
+                        return new PdfListBoxField(dict);
+                    case PdfAcroFieldType.Signature:
                         return new PdfSignatureField(dict);
-
                     default:
                         return new PdfGenericField(dict);
                 }
             }
-        }
 
+            private IEnumerable<PdfAcroField> Fields()
+            {
+                int count = Elements.Count;
+                for (int idx = 0; idx < count; idx++)
+                {
+                    yield return this[idx];
+                }
+            }
+            /// <summary>
+            /// Ë÷ÒýÆ÷
+            /// </summary>
+            /// <returns></returns>
+            public new IEnumerator<PdfAcroField> GetEnumerator()
+            {
+                return Fields().GetEnumerator();
+            }
+        }
         /// <summary>
         /// Predefined keys of this dictionary. 
         /// The description comes from PDF 1.4 Reference.
@@ -574,6 +1127,42 @@ namespace PdfSharp.Pdf.AcroForms
             public const string Q = "/Q";
 
             // ReSharper restore InconsistentNaming
+
+            /// <summary>
+            /// Optional: Reference to the Page object containing this field
+            /// </summary>
+            [KeyInfo(KeyType = KeyType.Optional)]
+            public const string Page = "/P";
+
+            /// <summary>
+            /// (Optional) The type of PDF object that this dictionary describes; if present,
+            /// must be Sig for a signature dictionary.
+            /// </summary>
+            [KeyInfo(KeyType.Name | KeyType.Optional)]
+            public const string Type = "/Type";
+
+            /// <summary>
+            /// 
+            /// </summary>
+            [KeyInfo(KeyType.Name | KeyType.Required)]
+            public const string Subtype = "/Subtype";
+
+            /// <summary>
+            /// 
+            /// </summary>
+            [KeyInfo(KeyType.Rectangle | KeyType.Required)]
+            public const string Rect = "/Rect";
+        }
+
+        /// <summary>
+        /// Strings used in the Dictionaries for the various types of fields.
+        /// </summary>
+        public static class PdfAcroFieldTypes
+        {
+            public const string Button = "/Btn";
+            public const string Text = "/Tx";
+            public const string Choice = "/Ch";
+            public const string Signature = "/Sig";
         }
     }
 }

@@ -1,4 +1,4 @@
-#region PDFsharp - A .NET library for processing PDF
+ï»¿#region PDFsharp - A .NET library for processing PDF
 //
 // Authors:
 //   Stefan Lange
@@ -186,6 +186,25 @@ namespace PdfSharp.Pdf.Advanced
                     _acroForm = (PdfAcroForm)Elements.GetValue(Keys.AcroForm);
                 return _acroForm;
             }
+
+            set
+            {
+                if (value != null)
+                {
+                    if (Elements.ContainsKey(Keys.AcroForm))
+                        Elements[Keys.AcroForm] = value;
+                    else
+                        Elements.Add(Keys.AcroForm, value);
+                    _acroForm = value;
+                }
+                else
+                {
+                    if (AcroForm != null && AcroForm.Reference != null)
+                        _document._irefTable.Remove(AcroForm.Reference);
+
+                    Elements.Remove(Keys.AcroForm);
+                }
+            }
         }
         PdfAcroForm _acroForm;
 
@@ -213,6 +232,11 @@ namespace PdfSharp.Pdf.Advanced
             // Prepare pages.
             if (_pages != null)
                 _pages.PrepareForSave();
+
+            if (AcroForm != null)
+            {
+                AcroForm.PrepareForSave();
+            }
 
             // Create outline objects.
             if (_outline != null && _outline.Outlines.Count > 0)
@@ -254,7 +278,7 @@ namespace PdfSharp.Pdf.Advanced
 
             /// <summary>
             /// (Optional; PDF 1.4) The version of the PDF specification to which the document
-            /// conforms (for example, 1.4) if later than the version specified in the file’s header.
+            /// conforms (for example, 1.4) if later than the version specified in the fileï¿½s header.
             /// If the header specifies a later version, or if this entry is absent, the document 
             /// conforms to the version specified in the header. This entry enables a PDF producer 
             /// application to update the version using an incremental update.
@@ -264,7 +288,7 @@ namespace PdfSharp.Pdf.Advanced
 
             /// <summary>
             /// (Required; must be an indirect reference) The page tree node that is the root of 
-            /// the document’s page tree.
+            /// the documentï¿½s page tree.
             /// </summary>
             [KeyInfo(KeyType.Dictionary | KeyType.Required | KeyType.MustBeIndirect, typeof(PdfPages))]
             public const string Pages = "/Pages";
@@ -279,7 +303,7 @@ namespace PdfSharp.Pdf.Advanced
             public const string PageLabels = "/PageLabels";
 
             /// <summary>
-            /// (Optional; PDF 1.2) The document’s name dictionary.
+            /// (Optional; PDF 1.2) The documentï¿½s name dictionary.
             /// </summary>
             [KeyInfo("1.2", KeyType.Dictionary | KeyType.Optional)]
             public const string Names = "/Names";
@@ -327,14 +351,14 @@ namespace PdfSharp.Pdf.Advanced
 
             /// <summary>
             /// (Optional; must be an indirect reference) The outline dictionary that is the root 
-            /// of the document’s outline hierarchy.
+            /// of the documentï¿½s outline hierarchy.
             /// </summary>
             [KeyInfo(KeyType.Dictionary | KeyType.Optional, typeof(PdfOutline))]
             public const string Outlines = "/Outlines";
 
             /// <summary>
             /// (Optional; PDF 1.1; must be an indirect reference) An array of thread dictionaries 
-            /// representing the document’s article threads.
+            /// representing the documentï¿½s article threads.
             /// </summary>
             [KeyInfo("1.1", KeyType.Array | KeyType.Optional)]
             public const string Threads = "/Threads";
@@ -363,7 +387,7 @@ namespace PdfSharp.Pdf.Advanced
             public const string URI = "/URI";
 
             /// <summary>
-            /// (Optional; PDF 1.2) The document’s interactive form (AcroForm) dictionary.
+            /// (Optional; PDF 1.2) The documentï¿½s interactive form (AcroForm) dictionary.
             /// </summary>
             [KeyInfo("1.2", KeyType.Dictionary | KeyType.Optional, typeof(PdfAcroForm))]
             public const string AcroForm = "/AcroForm";
@@ -376,14 +400,14 @@ namespace PdfSharp.Pdf.Advanced
             public const string Metadata = "/Metadata";
 
             /// <summary>
-            /// (Optional; PDF 1.3) The document’s structure tree root dictionary.
+            /// (Optional; PDF 1.3) The documentï¿½s structure tree root dictionary.
             /// </summary>
             [KeyInfo("1.3", KeyType.Dictionary | KeyType.Optional)]
             public const string StructTreeRoot = "/StructTreeRoot";
 
             /// <summary>
             /// (Optional; PDF 1.4) A mark information dictionary containing information
-            /// about the document’s usage of Tagged PDF conventions.
+            /// about the documentï¿½s usage of Tagged PDF conventions.
             /// </summary>
             [KeyInfo("1.4", KeyType.Dictionary | KeyType.Optional)]
             public const string MarkInfo = "/MarkInfo";
@@ -417,7 +441,7 @@ namespace PdfSharp.Pdf.Advanced
             public const string PieceInfo = "/PieceInfo";
 
             /// <summary>
-            /// (Optional; PDF 1.5; required if a document contains optional content) The document’s 
+            /// (Optional; PDF 1.5; required if a document contains optional content) The documentï¿½s 
             /// optional content properties dictionary.
             /// </summary>
             [KeyInfo("1.5", KeyType.Dictionary | KeyType.Optional)]

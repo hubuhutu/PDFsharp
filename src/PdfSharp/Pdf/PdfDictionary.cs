@@ -3,7 +3,7 @@
 // Authors:
 //   Stefan Lange
 //
-// Copyright (c) 2005-2019 empira Software GmbH, Cologne Area (Germany)
+// Copyright (c) 2005-2020 empira Software GmbH, Cologne Area (Germany)
 //
 // http://www.pdfsharp.com
 // http://sourceforge.net/projects/pdfsharp
@@ -234,8 +234,10 @@ namespace PdfSharp.Pdf
                 Debug.Assert(false, "Check when we come here.");
             }
 #endif
-            key.WriteObject(writer);
-            item.WriteObject(writer);
+            key.Write(writer);
+            item.Write(writer);
+            //key.WriteObject(writer);
+            //item.WriteObject(writer);
             writer.NewLine();
         }
 
@@ -500,7 +502,14 @@ namespace PdfSharp.Pdf
 
                 PdfReference reference = obj as PdfReference;
                 if (reference != null)
+                {
                     obj = reference.Value;
+
+                    if (reference.Value.Internals.TypeID == "PdfNullObject")
+                    {
+                        return null;
+                    }
+                }
 
                 PdfString str = obj as PdfString;
                 if (str != null)

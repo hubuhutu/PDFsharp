@@ -1,4 +1,4 @@
-#region PDFsharp - A .NET library for processing PDF
+ï»¿#region PDFsharp - A .NET library for processing PDF
 //
 // Authors:
 //   Stefan Lange
@@ -42,7 +42,7 @@ namespace PdfSharp.Pdf.IO
     /// <summary>
     /// Represents a writer for generation of PDF streams. 
     /// </summary>
-    internal class PdfWriter
+    public class PdfWriter
     {
         public PdfWriter(Stream pdfStream, PdfStandardSecurityHandler securityHandler)
         {
@@ -186,7 +186,7 @@ namespace PdfSharp.Pdf.IO
             PdfStringEncoding encoding = (PdfStringEncoding)(value.Flags & PdfStringFlags.EncodingMask);
             string pdf = (value.Flags & PdfStringFlags.HexLiteral) == 0 ?
                 PdfEncoders.ToStringLiteral(value.Value, encoding, SecurityHandler) :
-                PdfEncoders.ToHexStringLiteral(value.Value, encoding, SecurityHandler);
+                PdfEncoders.ToHexStringLiteral(value.Value, encoding, SecurityHandler,value.PaddingLeft);
             WriteRaw(pdf);
 #else
             switch (value.Flags & PdfStringFlags.EncodingMask)
@@ -420,7 +420,7 @@ namespace PdfSharp.Pdf.IO
 
             if (omitStream)
             {
-                WriteRaw("  «...stream content omitted...»\n");  // useful for debugging only
+                WriteRaw("  ï¿½...stream content omitted...ï¿½\n");  // useful for debugging only
             }
             else
             {

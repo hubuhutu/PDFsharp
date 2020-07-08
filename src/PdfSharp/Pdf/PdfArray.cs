@@ -1,4 +1,4 @@
-#region PDFsharp - A .NET library for processing PDF
+﻿#region PDFsharp - A .NET library for processing PDF
 //
 // Authors:
 //   Stefan Lange
@@ -70,6 +70,16 @@ namespace PdfSharp.Pdf
                 Elements.Add(item);
         }
 
+        public PdfArray(params PdfItem[] items)
+        {
+            foreach (PdfItem item in items)
+                Elements.Add(item);
+        }
+        public PdfArray(PdfDocument document, int paddingRight, params PdfItem[] items)
+      : this(document, items)
+        {
+            this.PaddingRight = paddingRight;
+        }
         /// <summary>
         /// Initializes a new instance from an existing dictionary. Used for object type transformation.
         /// </summary>
@@ -117,7 +127,10 @@ namespace PdfSharp.Pdf
         {
             get { return _elements ?? (_elements = new ArrayElements(this)); }
         }
-
+        /// <summary>
+        /// 右侧距离
+        /// </summary>
+        public int PaddingRight { get; private set; }
         /// <summary>
         /// Returns an enumerator that iterates through a collection.
         /// </summary>
@@ -152,9 +165,17 @@ namespace PdfSharp.Pdf
             for (int idx = 0; idx < count; idx++)
             {
                 PdfItem value = Elements[idx];
-                value.WriteObject(writer);
+                value.Write(writer);// value.WriteObject(writer);
             }
             writer.WriteEndObject();
+            if (PaddingRight > 0)
+            {
+                var bytes = new byte[PaddingRight];
+                for (int i = 0; i < PaddingRight; i++)
+                    bytes[i] = 32;
+
+                writer.Write(bytes);
+            }
         }
 
         /// <summary>

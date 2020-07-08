@@ -27,6 +27,12 @@
 // DEALINGS IN THE SOFTWARE.
 #endregion
 
+using PdfSharp.Drawing;
+using PdfSharp.Pdf.Annotations;
+using PdfSharp.Signatures;
+using System;
+using System.Drawing;
+
 namespace PdfSharp.Pdf.AcroForms
 {
     /// <summary>
@@ -35,15 +41,136 @@ namespace PdfSharp.Pdf.AcroForms
     public sealed class PdfSignatureField : PdfAcroField
     {
         /// <summary>
+        /// ÔµÓÉ
+        /// </summary>
+        public string Reason
+        {
+            get
+            {
+                return Elements.GetDictionary(Keys.V).Elements.GetString(Keys.Reason);
+            }
+            set
+            {
+                Elements.GetDictionary(Keys.V).Elements[Keys.Reason] = new PdfString(value);
+            }
+        }
+        /// <summary>
+        /// µØÖ·
+        /// </summary>
+        public string Location
+        {
+            get
+            {
+                return Elements.GetDictionary(Keys.V).Elements.GetString(Keys.Location);
+            }
+            set
+            {
+                Elements.GetDictionary(Keys.V).Elements[Keys.Location] = new PdfString(value);
+            }
+        }
+        /// <summary>
+        /// ÁªÏµÈË
+        /// </summary>
+        public string Contact
+        {
+            get
+            {
+                return Elements.GetDictionary(Keys.V).Elements.GetString(Keys.ContactInfo);
+            }
+            set { Elements.GetDictionary(Keys.V).Elements[Keys.ContactInfo] = new PdfString(value); }
+        }
+
+        /// <summary>
+        /// ÄÚÈÝ
+        /// </summary>
+        public PdfItem Contents
+        {
+            get
+            {
+                return Elements.GetDictionary(Keys.V).Elements[Keys.Contents];
+            }
+            set
+            {
+                Elements.GetDictionary(Keys.V).Elements.Add(Keys.Contents, value);
+            }
+        }
+
+
+        public PdfItem ByteRange
+        {
+            get
+            {
+                return Elements.GetDictionary(Keys.V).Elements[Keys.ByteRange];
+            }
+            set
+            {
+                Elements.GetDictionary(Keys.V).Elements.Add(Keys.ByteRange, value);
+            }
+        }
+
+        public ISignatureAppearanceHandler AppearanceHandler { get; internal set; }
+
+        /// <summary>
         /// Initializes a new instance of PdfSignatureField.
         /// </summary>
         internal PdfSignatureField(PdfDocument document)
             : base(document)
-        { }
+        {
+            Elements.Add(Keys.FT, new PdfName("/Sig"));
+            Elements.Add(Keys.T, new PdfString("Signature1"));
+            Elements.Add(Keys.Ff, new PdfInteger(132));
+            Elements.Add(Keys.DR, new PdfDictionary());
+            Elements.Add(Keys.Type, new PdfName("/Annot"));
+            Elements.Add(Keys.Subtype, new PdfName("/Widget"));
+            Elements.Add(Keys.Page, document.Pages[0]);
+
+
+            PdfDictionary sign = new PdfDictionary(document);
+            sign.Elements.Add(Keys.Type, new PdfName("/Sig"));
+            sign.Elements.Add(Keys.Filter, new PdfName("/Adobe.PPKLite"));
+            sign.Elements.Add(Keys.SubFilter, new PdfName("/adbe.pkcs7.detached"));
+            sign.Elements.Add(Keys.M, new PdfDate(DateTime.Now));
+
+            document._irefTable.Add(sign);
+            document._irefTable.Add(this);
+
+            Elements.Add(Keys.V, sign);
+        }
 
         internal PdfSignatureField(PdfDictionary dict)
             : base(dict)
         { }
+
+        internal override void PrepareForSave()
+        {
+            if (Rect.X1 + Rect.X2 + Rect.Y1 + Rect.Y2 == 0)
+                return;
+
+            if (this.AppearanceHandler == null)
+                return;
+
+
+
+            PdfRectangle rect = Elements.GetRectangle(PdfAnnotation.Keys.Rect);
+            XForm form = new XForm(this._document, rect.Size);
+            XGraphics gfx = XGraphics.FromForm(form);
+            // XGraphics gfx = XGraphics.FromPdfPage(this._document.Pages[this._document.PageCount - 1]);
+
+            this.AppearanceHandler.DrawAppearance(gfx, rect.ToXRect());
+
+            form.DrawingFinished();
+
+            // Get existing or create new appearance dictionary
+            PdfDictionary ap = Elements[PdfAnnotation.Keys.AP] as PdfDictionary;
+            if (ap == null)
+            {
+                ap = new PdfDictionary(this._document);
+                Elements[PdfAnnotation.Keys.AP] = ap;
+            }
+
+            // Set XRef to normal state
+            ap.Elements["/N"] = form.PdfForm.Reference;
+        }
 
         /// <summary>
         /// Predefined keys of this dictionary.
@@ -108,11 +235,16 @@ namespace PdfSharp.Pdf.AcroForms
             public const string Location = "/Location";
 
             /// <summary>
-            /// (Optional) The reason for the signing, such as (I agree…).
+            /// (Optional) The reason for the signing, such as (I agree?.
             /// </summary>
             [KeyInfo(KeyType.TextString | KeyType.Optional)]
             public const string Reason = "/Reason";
 
+            /// <summary>
+            /// (Optional) The Contact for the signing, such as (I agree?.
+            /// </summary>
+            [KeyInfo(KeyType.TextString | KeyType.Optional)]
+            public const string ContactInfo = "/ContactInfo";
             /// <summary>
             /// Gets the KeysMeta for these keys.
             /// </summary>

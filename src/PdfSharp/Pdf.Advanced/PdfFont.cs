@@ -45,6 +45,9 @@ namespace PdfSharp.Pdf.Advanced
         public PdfFont(PdfDocument document)
             : base(document)
         { }
+        public PdfFont(PdfDictionary dict)
+            : base(dict)
+        { }
 
         internal PdfFontDescriptor FontDescriptor
         {

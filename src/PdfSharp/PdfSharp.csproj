@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>PdfSharp</RootNamespace>
     <AssemblyName>PdfSharp</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SccProjectName>SAK</SccProjectName>
     <SccLocalPath>SAK</SccLocalPath>
@@ -48,6 +48,7 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
@@ -198,6 +199,7 @@
     <Compile Include="Internal\NativeMethods.cs" />
     <Compile Include="Internal\TokenizerHelper.cs" />
     <Compile Include="Pdf.AcroForms\enums\PdfAcroFieldFlags.cs" />
+    <Compile Include="Pdf.AcroForms\enums\PdfAcroFieldType.cs" />
     <Compile Include="Pdf.AcroForms\PdfAcroField.cs" />
     <Compile Include="Pdf.AcroForms\PdfAcroForm.cs" />
     <Compile Include="Pdf.AcroForms\PdfButtonField.cs" />
@@ -314,6 +316,11 @@
     <Compile Include="Pdf.Security\PdfSecurityHandler.cs" />
     <Compile Include="Pdf.Security\PdfSecuritySettings.cs" />
     <Compile Include="Pdf.Security\PdfStandardSecurityHandler.cs" />
+    <Compile Include="Pdf.Signatures\DefaultAppearanceHandler.cs" />
+    <Compile Include="Pdf.Signatures\ISignatureAppearanceHandler.cs" />
+    <Compile Include="Pdf.Signatures\PdfSignatureHandler.cs" />
+    <Compile Include="Pdf.Signatures\PdfSignatureOptions.cs" />
+    <Compile Include="Pdf.Signatures\PositionTracker.cs" />
     <Compile Include="Pdf.Structure\PdfAttributesBase.cs" />
     <Compile Include="Pdf.Structure\PdfLayoutAttributes.cs" />
     <Compile Include="Pdf.Structure\PdfObjectReference.cs" />
@@ -408,6 +415,10 @@
     <Compile Include="SharpZipLib\Zip\Compression\Streams\StreamManipulator.cs" />
     <Compile Include="SharpZipLib\Zip\ZipConstants.cs" />
     <Compile Include="SharpZipLib\Zip\ZipException.cs" />
+    <Compile Include="x509\CAPI.cs" />
+    <Compile Include="x509\PkcsUtils.cs" />
+    <Compile Include="x509\SignedCmsX.cs" />
+    <Compile Include="x509\X509UtilsX.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\Messages.de.restext">
